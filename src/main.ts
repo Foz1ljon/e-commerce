@@ -11,14 +11,21 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // Validatatsiya sozlamalasi
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   // Swagger sozlamalari
   const config = new DocumentBuilder()
-    .setTitle('Author API')
-    .setDescription('The author API description')
+    .setTitle('E-commerce APP')
+    .setDescription('The Rest full API description')
     .setVersion('1.0')
-    .addTag('DevbookUz')
+    .addTag('E-commerce')
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

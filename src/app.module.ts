@@ -6,6 +6,9 @@ import { JwtModule } from './jwt/jwt.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { EmailModule } from './email/email.module';
 import { RedisModule } from './redis/redis.module';
+import { UsersModule } from './users/users.module';
+import { AdminModule } from './admin/admin.module';
+import { RolesModule } from './roles/roles.module';
 
 @Module({
   imports: [
@@ -28,6 +31,9 @@ import { RedisModule } from './redis/redis.module';
     CloudinaryModule,
     EmailModule,
     RedisModule,
+    UsersModule,
+    AdminModule,
+    RolesModule,
   ],
   controllers: [],
   providers: [],

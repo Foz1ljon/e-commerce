@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import nodemailer, { Transporter } from 'nodemailer';
+import { Transporter } from 'nodemailer';
 import { createTransport } from 'nodemailer';
+import * as Handlebars from 'handlebars';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 @Injectable()
 export class EmailService {
@@ -19,19 +22,30 @@ export class EmailService {
     });
   }
 
+  private async compileTemplate(
+    templateName: string,
+    context: any,
+  ): Promise<string> {
+    const filePath = join(__dirname, 'templates', `${templateName}.hbs`);
+    const source = readFileSync(filePath, 'utf8'); // Shablon faylini o'qish
+    const template = Handlebars.compile(source); // Shablonni kompilatsiya qilish
+    return template(context); // Kontekstni shablonga qo'shish
+  }
+
   async sendMail(
     to: string,
     subject: string,
-    text: string,
-    html?: string,
+    templateName: string,
+    context: any,
   ): Promise<void> {
     try {
+      const html = await this.compileTemplate(templateName, context); // HTMLni tayyorlash
+
       const info = await this.transporter.sendMail({
         from: process.env.MAIL_FROM, // Sender address
         to,
         subject,
-        text,
-        html,
+        html, // HTML xabar
       });
       this.logger.log(`Email sent: ${info.messageId}`);
     } catch (error) {
