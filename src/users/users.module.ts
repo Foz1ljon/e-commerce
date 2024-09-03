@@ -9,9 +9,11 @@ import { Role } from '../roles/entities/role.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtService } from '../jwt/jwt.service';
 import { EmailModule } from '../email/email.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     TypeOrmModule.forFeature([User, Role]),
     CloudinaryModule,
     RolesModule,

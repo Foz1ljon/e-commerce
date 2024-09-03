@@ -25,7 +25,7 @@ import { RolesModule } from './roles/roles.module';
       database: 'devbook',
       entities: [__dirname + '/**/*.entity.{js,ts}'],
       synchronize: true, // Use only in development
-      logging: true,
+      logging: false,
     }),
     JwtModule,
     CloudinaryModule,

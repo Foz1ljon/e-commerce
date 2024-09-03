@@ -23,14 +23,8 @@ export class CreateUserDto {
   @IsString({ message: "Familiya faqat matnli bo'lishi kerak" })
   lname: string;
 
-  @ApiProperty({
-    example: 'photo.jpg',
-    description: 'Foydalanuvchining surati (ixtiyoriy)',
-    required: false,
-  })
-  @IsOptional()
-  @IsString({ message: "Surat faqat matnli bo'lishi kerak" })
-  photo: string;
+  @ApiProperty({ type: String, format: 'binary', required: false })
+  photo?: any;
 
   @ApiProperty({
     example: 'example@gmail.com',
@@ -39,7 +33,7 @@ export class CreateUserDto {
   })
   @IsOptional()
   @IsEmail({}, { message: "Noto'g'ri elektron pochta manzili kiritilgan" })
-  email: string;
+  email?: string;
 
   @ApiProperty({
     example: '+998901234567',
@@ -48,7 +42,7 @@ export class CreateUserDto {
   })
   @IsOptional()
   @IsPhoneNumber('UZ', { message: "Noto'g'ri telefon raqami kiritilgan" })
-  phone_number: string;
+  phone_number?: string;
 
   @ApiProperty({
     example: 'strongPassword123',

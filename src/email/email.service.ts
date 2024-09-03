@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Transporter } from 'nodemailer';
-import { createTransport } from 'nodemailer';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { Transporter, createTransport } from 'nodemailer';
 import * as Handlebars from 'handlebars';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -8,28 +11,52 @@ import { join } from 'path';
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: Transporter;
+  private readonly transporter: Transporter;
 
   constructor() {
-    this.transporter = createTransport({
-      host: process.env.MAIL_HOST, // Your SMTP server host
-      port: parseInt(process.env.MAIL_PORT, 10), // Your SMTP server port
-      secure: process.env.MAIL_SECURE === 'true', // True for 465, false for other ports
+    this.transporter = this.createTransporter();
+  }
+
+  private createTransporter(): Transporter {
+    const { MAIL_HOST, MAIL_PORT, MAIL_SECURE, MAIL_USER, MAIL_PASS } =
+      process.env;
+
+    // Validate environment variables
+    if (!MAIL_HOST || !MAIL_USER || !MAIL_PASS) {
+      throw new InternalServerErrorException(
+        'Email service configuration is missing required environment variables.',
+      );
+    }
+
+    return createTransport({
+      host: MAIL_HOST,
+      port: parseInt(MAIL_PORT, 10) || 587, // Default to 587 if MAIL_PORT is not set
+      secure: MAIL_SECURE === 'true', // Use secure connection if specified
       auth: {
-        user: process.env.MAIL_USER, // Your SMTP user
-        pass: process.env.MAIL_PASS, // Your SMTP password
+        user: MAIL_USER,
+        pass: MAIL_PASS,
       },
     });
   }
 
-  private async compileTemplate(
-    templateName: string,
-    context: any,
-  ): Promise<string> {
-    const filePath = join(__dirname, 'templates', `${templateName}.hbs`);
-    const source = readFileSync(filePath, 'utf8'); // Shablon faylini o'qish
-    const template = Handlebars.compile(source); // Shablonni kompilatsiya qilish
-    return template(context); // Kontekstni shablonga qo'shish
+  private compileTemplate(templateName: string, context: any): string {
+    // Update to point to the correct template directory
+    const filePath = join(
+      __dirname,
+      '..',
+      'email',
+      'template',
+      `${templateName}.hbs`,
+    );
+
+    try {
+      const source = readFileSync(filePath, 'utf8');
+      const template = Handlebars.compile(source);
+      return template(context);
+    } catch (error) {
+      this.logger.error(`Error reading template: ${filePath}`, error);
+      throw new InternalServerErrorException('Template rendering failed');
+    }
   }
 
   async sendMail(
@@ -39,18 +66,24 @@ export class EmailService {
     context: any,
   ): Promise<void> {
     try {
-      const html = await this.compileTemplate(templateName, context); // HTMLni tayyorlash
+      const html = this.compileTemplate(templateName, context);
 
-      const info = await this.transporter.sendMail({
-        from: process.env.MAIL_FROM, // Sender address
+      // Set the sender's name and email
+      const senderName = 'Online-Food'; // Change this to your desired name
+      const senderEmail = process.env.MAIL_FROM || process.env.MAIL_USER;
+
+      const mailOptions = {
+        from: `"${senderName}" <${senderEmail}>`, // Format: "Name" <email>
         to,
         subject,
-        html, // HTML xabar
-      });
+        html,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
       this.logger.log(`Email sent: ${info.messageId}`);
     } catch (error) {
       this.logger.error(`Failed to send email: ${error.message}`, error.stack);
-      throw new Error('Failed to send email');
+      throw new InternalServerErrorException('Failed to send email');
     }
   }
 }

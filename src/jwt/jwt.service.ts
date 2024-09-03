@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtService as NestJwtService } from '@nestjs/jwt';
 
 @Injectable()
@@ -6,60 +6,51 @@ export class JwtService {
   constructor(private readonly jwtService: NestJwtService) {}
 
   /**
-   * Ham access (kirish) ham refresh (yangilash) tokenlarini yaratadi.
-   *
-   * @param payload - Token ichida bo'lishi kerak bo'lgan ma'lumotlar, odatda foydalanuvchi tafsilotlari (id, rol, va hokazo) bo'ladi.
-   * @returns Quyidagi ma'lumotlarni o'z ichiga olgan obyekt:
-   *  - `sub`: Subyekt identifikatori (odatda foydalanuvchi id'si)
-   *  - `accessToken`: Yaratilgan access token
-   *  - `refreshToken`: Yaratilgan refresh token
-   *
-   * Access tokenning muddati `JWT_ACCESS_TIME` ga (standart: 15 soat) ko'ra tugaydi.
-   * Refresh tokenning muddati `JWT_REFRESH_TIME` ga (standart: 15 kun) ko'ra tugaydi.
+   * Generates both access and refresh tokens.
    */
+
   generateTokens(payload: any) {
     const pay = {
-      sub: payload.id,
-      role: payload.role,
-      active: payload.active,
+      sub: payload.id, // Subject or user ID
+      role: payload.role, // User role
+      active: payload.active, // User active status
     };
 
+    // Generate Access Token
     const accessToken = this.jwtService.sign(pay, {
-      expiresIn: process.env.JWT_ACCESS_TIME || '24h',
+      expiresIn: process.env.JWT_ACCESS_TIME || '24h', // Default to 24 hours
+      // You may also want to specify the secret here if needed:
+      secret: process.env.JWT_ACCESS_KEY || 'default-access-key', // Access key if necessary
     });
+
+    // Generate Refresh Token
     const refreshToken = this.jwtService.sign(pay, {
-      secret: process.env.JWT_REFRESH_KEY,
-      expiresIn: process.env.JWT_REFRESH_TIME || '18d',
+      secret: process.env.JWT_REFRESH_KEY || 'default-refresh-key', // Specify the refresh secret
+      expiresIn: process.env.JWT_REFRESH_TIME || '18d', // Default to 18 days
     });
+
     return {
-      sub: payload.id,
-      accessToken,
-      refreshToken,
+      sub: payload.id, // Return the user ID
+      accessToken, // Return the access token
+      refreshToken, // Return the refresh token
     };
   }
 
   /**
-   * Aktivatsiya tokenini generatsiya qiladi.
-   *
-   * @param payload - Token ichida bo'lishi kerak bo'lgan ma'lumotlar.
-   * @returns Yaratilgan aktivatsiya tokeni.
+   * Generates an activation token.
    */
   generateActivationToken(payload: any) {
     return this.jwtService.sign(
       { sub: payload.id },
       {
-        expiresIn: process.env.JWT_ACTIVATION_TIME || '3m', // Aktivatsiya tokeni muddati
+        secret: process.env.JWT_ACTIVATION_KEY,
+        expiresIn: process.env.JWT_ACTIVATION_TIME || '3m',
       },
     );
   }
 
   /**
-   * Access tokenning haqiqiyligini tekshiradi.
-   *
-   * @param token - Tekshirilishi kerak bo'lgan JWT access token.
-   * @returns Agar token haqiqiy bo'lsa, dekodlangan payload yoki agar token haqiqiy emas yoki muddati o'tgan bo'lsa `null` qaytaradi.
-   *
-   * Bu usul `JWT_ACCESS_KEY` yordamida verifikatsiya qilinadi.
+   * Verifies the validity of an access token.
    */
   verifyAccessToken(token: string): any {
     try {
@@ -73,12 +64,7 @@ export class JwtService {
   }
 
   /**
-   * Refresh tokenning haqiqiyligini tekshiradi.
-   *
-   * @param token - Tekshirilishi kerak bo'lgan JWT refresh token.
-   * @returns Agar token haqiqiy bo'lsa, dekodlangan payload yoki agar token haqiqiy emas yoki muddati o'tgan bo'lsa `null` qaytaradi.
-   *
-   * Bu usul `JWT_REFRESH_KEY` yordamida verifikatsiya qilinadi, yoki agar bu kalit mavjud bo'lmasa, `JWT_ACCESS_KEY` dan foydalaniladi.
+   * Verifies the validity of a refresh token.
    */
   verifyRefreshToken(token: string): any {
     try {
@@ -87,24 +73,48 @@ export class JwtService {
       });
     } catch (e) {
       console.log(e);
-      return null;
+      throw new BadRequestException('Token is expired');
     }
   }
 
   /**
-   * Aktivatsiya tokenning haqiqiyligini tekshiradi.
-   *
-   * @param token - Tekshirilishi kerak bo'lgan JWT aktivatsiya token.
-   * @returns Agar token haqiqiy bo'lsa, dekodlangan payload yoki agar token haqiqiy emas yoki muddati o'tgan bo'lsa `null` qaytaradi.
+   * Verifies the validity of an activation token.
    */
   verifyActivationToken(token: string): any {
     try {
       return this.jwtService.verify(token, {
-        secret: process.env.JWT_ACTIVATION_KEY, // Aktivatsiya tokeni uchun maxfiy kalit
+        secret: process.env.JWT_ACTIVATION_KEY,
       });
     } catch (e) {
       console.log(e);
-      return null;
+      throw new BadRequestException('Token is expired!');
+    }
+  }
+
+  /**
+   * Generates a password reset token.
+   */
+  generatePasswordResetToken(payload: any) {
+    return this.jwtService.sign(
+      { sub: payload.id },
+      {
+        secret: process.env.JWT_PASSWORD_RESET_KEY,
+        expiresIn: process.env.JWT_PASSWORD_RESET_TIME || '15m',
+      },
+    );
+  }
+
+  /**
+   * Verifies the validity of a password reset token.
+   */
+  verifyPasswordResetToken(token: string): any {
+    try {
+      return this.jwtService.verify(token, {
+        secret: process.env.JWT_PASSWORD_RESET_KEY,
+      });
+    } catch (e) {
+      console.log(e);
+      throw new BadRequestException('Token is expired!');
     }
   }
 }

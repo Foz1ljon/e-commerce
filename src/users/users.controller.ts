@@ -1,4 +1,3 @@
-// src/users/users.controller.ts
 import {
   Controller,
   Get,
@@ -9,6 +8,9 @@ import {
   Delete,
   UploadedFile,
   UseInterceptors,
+  Query,
+  InternalServerErrorException,
+  Res,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/register-user.dto';
@@ -20,12 +22,14 @@ import {
   ApiResponse,
   ApiBody,
   ApiConsumes,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { User } from './entities/user.entity';
-import { RefreshTokenDto } from './dto/refresh-token.dto'; // RefreshTokenDto import
-import { TokenDto } from './dto/token.dto'; // TokenDto import
-import { EmailDto } from './dto/email.dto'; // EmailDto import
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { EmailDto } from './dto/email.dto';
 import { LoginUserDto } from './dto/login-user.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { Response } from 'express'; // Import Response from express
 
 @ApiTags('foydalanuvchilar')
 @Controller('users')
@@ -34,12 +38,13 @@ export class UsersController {
 
   // Foydalanuvchini ro'yxatdan o'tkazish
   @Post('register')
-  @UseInterceptors(FileInterceptor('photo'))
-  @ApiConsumes('multipart/form-data') // Indicate that this endpoint consumes multipart/form-data
+  @UseInterceptors(FileInterceptor('photo')) // Rasm yuklash uchun interceptor
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: "Yangi foydalanuvchini ro'yxatdan o'tkazish" })
   @ApiBody({
-    type: CreateUserDto,
     description: "Foydalanuvchi ro'yxatga olish uchun kerakli ma'lumotlar",
+    type: CreateUserDto,
+    required: true,
   })
   @ApiResponse({
     status: 201,
@@ -50,15 +55,17 @@ export class UsersController {
   async create(
     @Body() createUserDto: CreateUserDto,
     @UploadedFile() photo: Express.Multer.File,
+    @Res({ passthrough: true }) res: Response, // Response obyektini qo'shish
   ) {
-    return this.usersService.register(createUserDto, photo);
+    // Foydalanuvchini ro'yxatdan o'tkazish funksiyasini chaqirish
+    return this.usersService.register(createUserDto, photo, res);
   }
 
-  //Login qismi
+  // Login qismi
   @Post('login')
-  @ApiConsumes('application/json') // Indicate that this endpoint consumes application/json
+  @ApiConsumes('application/json')
   @ApiOperation({ summary: 'Foydalanuvchini kirish' })
-  @ApiBody({ type: LoginUserDto }) // LoginUserDto dan foydalanish
+  @ApiBody({ type: LoginUserDto })
   @ApiResponse({
     status: 200,
     description: 'Foydalanuvchi muvaffaqiyatli kirdi.',
@@ -67,20 +74,47 @@ export class UsersController {
     status: 404,
     description: 'Foydalanuvchi topilmadi yoki parol xato.',
   })
-  async login(@Body() loginUserDto: LoginUserDto) {
-    return this.usersService.login(loginUserDto);
+  async login(
+    @Body() loginUserDto: LoginUserDto,
+    @Res() res: Response, // Response obyektini qo'shish
+  ) {
+    // Foydalanuvchini tizimga kiritish
+    return this.usersService.login(loginUserDto, res);
   }
 
   // Barcha foydalanuvchilarni olish
   @Get()
   @ApiOperation({ summary: 'Barcha foydalanuvchilarni olish' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Sahifa raqami',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Sahifadagi elementlar soni',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: "Qidiruv so'zi (ismi, nomeri yoki emaili bo'yicha)",
+  })
   @ApiResponse({
     status: 200,
     description: "Foydalanuvchilar ro'yxati.",
     type: [User],
   })
-  async findAll() {
-    return this.usersService.findAll();
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('search') search?: string,
+  ) {
+    // Barcha foydalanuvchilarni olish
+    return this.usersService.findAll(page, limit, search);
   }
 
   // ID bo'yicha foydalanuvchini topish
@@ -93,13 +127,14 @@ export class UsersController {
   })
   @ApiResponse({ status: 404, description: 'Foydalanuvchi topilmadi.' })
   async findOne(@Param('id') id: string) {
+    // Foydalanuvchini ID bo'yicha topish
     return this.usersService.findOne(+id);
   }
 
   // ID bo'yicha foydalanuvchini yangilash
   @Patch(':id')
-  @UseInterceptors(FileInterceptor('photo'))
-  @ApiConsumes('multipart/form-data') // Indicate that this endpoint consumes multipart/form-data
+  @UseInterceptors(FileInterceptor('photo')) // Rasm yuklash uchun interceptor
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: "ID bo'yicha foydalanuvchini yangilash" })
   @ApiBody({
     type: UpdateUserDto,
@@ -117,6 +152,7 @@ export class UsersController {
     @Body() updateUserDto: UpdateUserDto,
     @UploadedFile() photo?: Express.Multer.File,
   ) {
+    // Foydalanuvchini yangilash
     return this.usersService.update(+id, updateUserDto, photo);
   }
 
@@ -131,46 +167,55 @@ export class UsersController {
   })
   @ApiResponse({ status: 404, description: 'Foydalanuvchi topilmadi.' })
   async remove(@Param('id') id: string) {
-    return this.usersService.remove(+id);
+    // Foydalanuvchini o'chirish
+    await this.usersService.remove(+id);
   }
 
   // Foydalanuvchini aktivatsiya qilish
   @Post('activate')
-  @ApiConsumes('application/json') // Indicate that this endpoint consumes application/json
   @ApiOperation({ summary: 'Foydalanuvchi hisobini aktivatsiya qilish' })
-  @ApiBody({ type: TokenDto }) // TokenDto dan foydalanish
   @ApiResponse({
     status: 200,
     description: 'Foydalanuvchi muvaffaqiyatli aktivlashtirildi.',
   })
   @ApiResponse({ status: 404, description: 'Foydalanuvchi topilmadi.' })
-  async activateUser(@Body() tokenDto: TokenDto): Promise<void> {
-    return this.usersService.activateUser(tokenDto.token);
+  async activateUser(@Query('token') token: string) {
+    // Aktivatsiya tokenini tekshirish
+    if (!token) {
+      throw new InternalServerErrorException('Token zarur.');
+    }
+    await this.usersService.activateUser(token);
+    return { message: 'Foydalanuvchi muvaffaqiyatli aktivlashtirildi.' };
   }
 
   // Emailni qaytadan jo'natish
   @Post('resend-activation')
-  @ApiConsumes('application/json') // Indicate that this endpoint consumes application/json
+  @ApiConsumes('application/json')
   @ApiOperation({ summary: "Aktivatsiya emailini qaytadan jo'natish" })
-  @ApiBody({ type: EmailDto }) // EmailDto dan foydalanish
+  @ApiBody({ type: EmailDto })
   @ApiResponse({
     status: 200,
     description: "Aktivatsiya emaili muvaffaqiyatli qaytadan jo'natildi.",
   })
   @ApiResponse({ status: 404, description: 'Foydalanuvchi topilmadi.' })
   async resendActivationEmail(@Body() emailDto: EmailDto) {
-    return this.usersService.resendActivationEmail(emailDto.email);
+    // Aktivatsiya emailini qaytadan jo'natish
+    await this.usersService.resendActivationEmail(emailDto.email);
   }
 
   // Refresh tokenni yangilash
   @Post('refresh-token')
-  @ApiConsumes('application/json') // Indicate that this endpoint consumes application/json
+  @ApiConsumes('application/json')
   @ApiOperation({ summary: 'Foydalanuvchi tokenini yangilash' })
-  @ApiBody({ type: RefreshTokenDto }) // RefreshTokenDto dan foydalanish
+  @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({ status: 200, description: 'Token muvaffaqiyatli yangilandi.' })
   @ApiResponse({ status: 401, description: "Noto'g'ri refresh token." })
-  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.usersService.refreshToken(refreshTokenDto.refreshToken);
+  async refreshToken(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Res() res: Response, // Response obyektini qo'shish
+  ) {
+    // Tokenni yangilash
+    return this.usersService.refreshToken(refreshTokenDto.refreshToken, res);
   }
 
   // Logout funksiyasi
@@ -182,6 +227,60 @@ export class UsersController {
   })
   @ApiResponse({ status: 404, description: 'Foydalanuvchi topilmadi.' })
   async logout(@Param('id') id: string) {
-    return this.usersService.logout(+id);
+    // Foydalanuvchini logout qilish
+    await this.usersService.logout(+id);
+  }
+
+  // Parolni tiklash uchun email yuborish
+  @Post('forgot-password')
+  @ApiConsumes('application/json')
+  @ApiOperation({ summary: 'Parolni tiklash uchun email yuborish' })
+  @ApiBody({ type: EmailDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Parolni tiklash emaili yuborildi.',
+  })
+  @ApiResponse({ status: 404, description: 'Foydalanuvchi topilmadi.' })
+  async forgotPassword(@Body() emailDto: EmailDto) {
+    // Parolni tiklash uchun email yuborish
+    await this.usersService.forgotPassword(emailDto.email);
+  }
+
+  // Yangi parolni o'rnatish
+  @Post('reset-password')
+  @ApiConsumes('application/json')
+  @ApiOperation({
+    summary: "Yangi parolni o'rnatish",
+    description: "Foydalanuvchi yangi parolni o'rnatishi mumkin.",
+  })
+  @ApiQuery({
+    name: 'token',
+    type: String,
+    description: 'Parolni tiklash uchun token',
+    required: true,
+  })
+  @ApiBody({
+    type: ResetPasswordDto,
+    description: "Yangi parolni kiritish uchun JSON formatidagi ma'lumot",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Parol muvaffaqiyatli tiklandi.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Foydalanuvchi topilmadi.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Noto'g'ri parol yoki token.",
+  })
+  async resetPassword(
+    @Query('token') token: string,
+    @Body() resetPasswordDto: ResetPasswordDto,
+  ) {
+    const { newPassword } = resetPasswordDto;
+    // Yangi parolni o'rnatish
+    return this.usersService.resetPassword(token, newPassword);
   }
 }
